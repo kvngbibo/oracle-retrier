@@ -1,0 +1,37 @@
+name: oracle-retrier
+on:
+  schedule:
+    - cron: "3-58/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = checks only, launch = real try"
+        type: choice
+        options: [dry-run, launch]
+        default: dry-run
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: oracle-retrier
+  cancel-in-progress: false
+jobs:
+  try:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCI CLI
+        run: pip install --quiet "oci-cli==3.95.1"
+      - name: One baton round
+        env:
+          MODE: ${{ github.event_name == 'schedule' && 'launch' || inputs.mode }}
+          ENABLE_LAUNCH: ${{ vars.ENABLE_LAUNCH }}
+          GH_TOKEN: ${{ github.token }}
+          OCI_CONFIG: ${{ secrets.OCI_CONFIG }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+        run: bash retrier.sh

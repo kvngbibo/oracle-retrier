@@ -19,7 +19,7 @@ concurrency:
 jobs:
   try:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - name: Install OCI CLI
@@ -36,3 +36,13 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
         run: bash retrier.sh
+      - name: Queue next round (keeps trying without the cron)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENABLE_LAUNCH: ${{ vars.ENABLE_LAUNCH }}
+        run: |
+          if [ -f /tmp/STOP_CHAIN ]; then echo "RESULT: CHAIN_STOPPED"; exit 0; fi
+          if [ "${ENABLE_LAUNCH:-}" != yes ]; then echo "RESULT: LAUNCH_OFF_NO_CHAIN"; exit 0; fi
+          sleep 240
+          gh workflow run oracle-retrier.yml --repo "$GITHUB_REPOSITORY" -f mode=launch && echo "RESULT: NEXT_ROUND_QUEUED" || echo "RESULT: WARN_QUEUE_FAILED"

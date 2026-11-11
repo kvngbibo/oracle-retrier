@@ -1,3 +1,4 @@
+# Baton retrier - schedule re-registered 11 Nov 2026
 name: oracle-retrier
 on:
   schedule:

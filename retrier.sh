@@ -67,13 +67,13 @@ count_servers(){
 
 # 4. Take the baton or yield
 read_baton
-if [ "$B" = ok ] && [ "$STATUS" = launched ]; then say LAUNCHED_ALREADY; disable_wf; exit 0; fi
+if [ "$B" = ok ] && [ "$STATUS" = launched ]; then touch /tmp/STOP_CHAIN; say LAUNCHED_ALREADY; disable_wf; exit 0; fi
 if [ "$B" = ok ] && [ "$OWNER" = cloudshell ] && [ "$STATUS" != stopped ] && [ "$AGE" -lt "$CS_STALE" ]; then
   say "LEASE_HELD_BY_CLOUDSHELL (${AGE}s old)"; exit 0; fi
 write_baton trying || { say LEASE_LOST; exit 0; }
 
 # 5. Stop for good if any non-TERMINATED n8n-server exists
-C=$(count_servers); if [ "$C" != 0 ]; then mark_launched || true; disable_wf; say SERVER_EXISTS; exit 0; fi
+C=$(count_servers); if [ "$C" != 0 ]; then mark_launched || true; disable_wf; touch /tmp/STOP_CHAIN; say SERVER_EXISTS; exit 0; fi
 
 # 6. Exact resources (fail closed)
 ADS=$(oci iam availability-domain list -c "$T" 2>/tmp/e) || { say "AD_ERROR $(classify /tmp/e)"; release; exit 1; }
@@ -106,7 +106,7 @@ fi
 
 # 8. One launch attempt
 write_baton launching || { say LEASE_LOST; exit 0; }
-C=$(count_servers); if [ "$C" != 0 ]; then mark_launched || true; disable_wf; say SERVER_EXISTS; exit 0; fi
+C=$(count_servers); if [ "$C" != 0 ]; then mark_launched || true; disable_wf; touch /tmp/STOP_CHAIN; say SERVER_EXISTS; exit 0; fi
 set +e
 oci compute instance launch --no-retry --availability-domain "$AD" -c "$T" \
   --shape VM.Standard.A1.Flex --shape-config '{"ocpus":1,"memoryInGBs":6}' \
@@ -119,7 +119,7 @@ if [ "$RC" -eq 0 ] && [[ "$ID" == ocid1.instance.* ]]; then
   mark_launched || true
   disable_wf
   tg "Your Oracle n8n-server was created (GitHub retrier). Open Oracle Console > Compute > Instances." || say WARN_TELEGRAM_FAILED
-  say SUCCESS; exit 0
+  touch /tmp/STOP_CHAIN; say SUCCESS; exit 0
 fi
 R=$(classify /tmp/e); release
 case "$R" in NO_CAPACITY|RATE_LIMITED) say "$R"; exit 0;; *) say "LAUNCH_FAILED $R"; exit 1;; esac

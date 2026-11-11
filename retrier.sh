@@ -93,7 +93,16 @@ for v in "$AD" "$VCN" "$SUBNET" "$IMAGE"; do echo "::add-mask::$v"; done
 echo "Checks: AD-1 ok | subnet: public subnet-n8n-network | image: $IMG_NAME | shape: A1.Flex 1 OCPU / 6 GB"
 
 # 7. Launch gate: only MODE=launch AND ENABLE_LAUNCH exactly "yes"
-if [ "${MODE:-}" != launch ] || [ "${ENABLE_LAUNCH:-}" != yes ]; then release; say DRY_RUN_OK; exit 0; fi
+tg(){ [ -n "${TG_BOT_TOKEN:-}" ] && [ -n "${TG_CHAT_ID:-}" ] || return 1
+  curl -sS -m 20 --fail -o /dev/null "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${TG_CHAT_ID}" --data-urlencode "text=$1"; }
+if [ "${MODE:-}" != launch ] || [ "${ENABLE_LAUNCH:-}" != yes ]; then
+  release
+  if [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ]; then
+    tg "Oracle retrier test OK - checks passed, nothing was launched." && say TELEGRAM_TEST_SENT || say WARN_TELEGRAM_TEST_FAILED
+  fi
+  say DRY_RUN_OK; exit 0
+fi
 
 # 8. One launch attempt
 write_baton launching || { say LEASE_LOST; exit 0; }
@@ -109,10 +118,7 @@ ID=$(jq -r '.data.id // empty' /tmp/o.json 2>/dev/null || true)
 if [ "$RC" -eq 0 ] && [[ "$ID" == ocid1.instance.* ]]; then
   mark_launched || true
   disable_wf
-  curl -sS -m 20 --fail -o /dev/null "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TG_CHAT_ID}" \
-    --data-urlencode "text=Your Oracle n8n-server was created (GitHub retrier). Open Oracle Console > Compute > Instances." \
-    || say WARN_TELEGRAM_FAILED
+  tg "Your Oracle n8n-server was created (GitHub retrier). Open Oracle Console > Compute > Instances." || say WARN_TELEGRAM_FAILED
   say SUCCESS; exit 0
 fi
 R=$(classify /tmp/e); release
